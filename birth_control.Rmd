@@ -1,0 +1,90 @@
+---
+title: "Birth Control"
+author: "Lucas Terciotti"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(randomForest)
+library(rpart)
+library(Amelia)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+```
+
+###Preparacao:
+```{r}
+bw <- read.csv(("https://raw.githubusercontent.com/Efsilvaa/EPSMLRepo/master/Data/birthwt.csv"),
+                    stringsAsFactors=FALSE,
+                    na.strings = c(""))
+missmap(bw, main = "Missing values vs observed")
+summary(bw)
+str(bw)
+hist(bw$bwt)
+```
+
+Transformando as variaveis categoricas em fatores:
+```{r}
+cols <- c('low', 'race', 'smoke', 'ht', 'ui')
+bw[cols] <- lapply(bw[cols], as.factor)
+```
+
+###Separação: Treinamento e Teste
+
+```{r}
+set.seed(123)
+
+train.index <- sample((nrow(bw)),0.7*nrow(bw))
+
+train <- bw[train.index,]
+test  <- bw[-train.index,]
+```
+
+##Modelo:
+```{r}
+fit <- glm(low ~ age + lwt + race +
+             smoke + ptl + ht + ui + ftv,
+           data = train,
+           family = binomial(link = "logit"))
+summary(fit)
+```
+
+Aqui podemos verificar que age, lwt e ftv apresentam um alto valor de P-value, o que os sinaliza como estatisticamente insignificantes.
+
+```{r}
+anova(fit, test="Chisq")
+```
+
+Aqui reforçamos a ideia de que algumas variaveis nao contribuem significativamente para o modelo, ja que ao serem adicionadas a queda no desvio residual é baixa em comparação a contribuiçao de, por exemplo, smoke, ptl e ui. Um p-value alto aqui indica que o modelo explicaria mais ou menos a mesma quantidade de variaçao sem a adiçao dessas variaveis (race, age, ftv - as duas ultimas tambem foram vistas  summary).
+
+###Previsao:
+Fizemos o modelo com o conjunto "train" de dados, agora aplicaremos em "test":
+```{r}
+prediction_prob <- predict(fit,newdata=test,type='response')
+prediction <- ifelse(prediction_prob > 0.5,1,0)
+table(prediction,test$low)
+prop.table(table(prediction,test$low))
+```
+
+Alcançamos uma acuracia de aproximadamente 66,6% de acerto. Devido as analises feitas anteriormente, vamos tentar utilizar um conjunto de dados menor: retiraremos os menos relevantes tanto pela análise em Summary quanto pela Anova:
+
+```{r}
+fit <- glm(low ~ lwt + race +
+             smoke + ptl + ht + ui,
+           data = train,
+           family = binomial(link = "logit"))
+summary(fit) 
+anova(fit, test="Chisq")
+
+prediction_prob <- predict(fit,newdata=test,type='response')
+prediction <- ifelse(prediction_prob > 0.5,1,0)
+table(prediction,test$low)
+prop.table(table(prediction,test$low))
+```
+
+Agora, alcançamos exatamente a mesma acuracia anterior (66,6%), mesmo tendo retirado age e ftv.
